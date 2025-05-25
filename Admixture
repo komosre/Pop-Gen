@@ -1,0 +1,43 @@
+## STEP1. Filtering biallelic SNP using vcftools + admixture only accept non-missing data so delete variants with missing data (you may want to do this STEP earlier to have smaller file at the beginning STEPs.
+vcftools --gzvcf Original.vcf.gz --remove-indels --min-alleles 2 --max-alleles 2 --max-missing 0.0 --minDP 8.0 --maxDP 120.0 --minQ 30 --recode --recode-INFO-all --stdout | bgzip -c > STEP1.vcf.gz
+
+## STEP2. to keep certain samples, make txt file with the names and save it as STEP2.txt
+
+## STEP3. 
+vcftools --gzvcf STEP1.vcf.gz --keep STEP2.txt --recode --recode-INFO-all --out STEP3
+
+## STEP4. if names of chromosome are not normal (e.g. NW_1912.1), should replace the names with easy name (e.g. 1). First extract chromosomes' names.
+bcftools query -f '%CHROM\n' STEP3.vcf.gz | sort | uniq > STEP4.txt
+
+## STEP5. assign a number to chromosome, like the below, and then save it as STEP5.txt
+NC_085136.1 1
+NC_085137.1 2
+NC_085138.1 3
+plink --
+## STEP6. Assign SNP ID if it does not have, and assign numbers
+bcftools annotate --rename-chrs STEP5.txt --set-id '%CHROM\_%POS' -Oz -o STEP6.vcf.gz STEP3.vcf
+
+## (STEP6.5) if you want to keep certain contig or chromosome
+vcftools --gzvcf STEP3.recode.vcf --chr XXX --recode --recode-INFO-all --out STEP6.5
+
+## STEP7. (gunzip STEP6.vcf.gz) Making 'half-call value' is acceptable 
+plink --vcf STEP6.vcf.gz --const-fid --allow-extra-chr --vcf-half-call m --recode 12 --make-bed --out STEP7
+
+## STEP8. LD pruning
+plink --bfile STEP7 --indep-pairwise 50 5 0.2 --out STEP8
+
+## STEP9. Create a new pruned dataset with LD pruned SNPs
+plink --bfile STEP7 --extract STEP8.prune.in --make-bed --out STEP9
+
+## STEP10. convert bim, bed, fam -> map, and ped file
+plink --bfile STEP9 --recode --out STEP9
+
+## STEP11. Admixture
+for K in 2 3 4 5 6;do admixture -B --cv STEP9.bed $K | tee log${K}.out; done
+
+##EXTRA
+## How to determine proper K?
+check CV value in each log.out file. The K value with the lowest CV value or with the smallest change of CV value is proper.
+
+## How to measure SNP number you used? type the code below and the number is the SNP number you used for admixture
+wc -l STEP8.bim  
